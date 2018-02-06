@@ -1,0 +1,19 @@
+#Every Day
+\\SRVFILES\tppdocs\АО\АО\Мониторинг\Деловые_объединения
+\\SRVFILES\tppdocs\АО\АО\Мониторинг\Министерства
+\\SRVFILES\tppdocs\АО\АО\Тематики-2018
+\\SRVFILES\tppdocs\АО\АО\Стратегия-ТППРФ
+
+#Every Week
+\\SRVFILES\tppdocs\АО\АО\src
+
+#Daily hour start time:
+18
+#Daily minutes start time:
+00
+
+#Friday hour start time:
+16
+#Friday minutes start time:
+45
+
