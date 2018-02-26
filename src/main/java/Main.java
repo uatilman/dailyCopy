@@ -3,6 +3,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.FileTime;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.*;
 
 public class Main {
     private static StringBuilder builder = new StringBuilder();
@@ -19,8 +20,9 @@ public class Main {
             justNow = Calendar.getInstance();
             startSmallCopy = Calendar.getInstance();
             startAllCopy = Calendar.getInstance();
+// TODO: 19.02.2018 replace DD - day in year to dd - day in month
 
-            builder.append(new SimpleDateFormat("YYYY.MM.DD_H.mm").format(justNow.getTime()));
+            builder.append(new SimpleDateFormat("YYYY.MM.dd_H.mm").format(justNow.getTime()));
             builder.append("\n");
             Files.write(LOG, builder.toString().getBytes(), StandardOpenOption.APPEND);
             builder.setLength(0);
@@ -98,8 +100,7 @@ public class Main {
 
     private static void prepareCopy(Calendar startCopy, List<Path> srcList, String type) throws IOException, InterruptedException {
         Path dst;
-        dst = Paths.get("E:\\" + new SimpleDateFormat("YYYY.MM.DD_H.mm").format(startCopy.getTime()) + "_" + type);
-
+        dst = Paths.get("E:\\" + new SimpleDateFormat("YYYY.MM.dd_H.mm").format(startCopy.getTime()) + "_test" + type);
 
         if (!Files.exists(dst))
             Files.createDirectory(dst);
@@ -107,6 +108,8 @@ public class Main {
         long dt = startCopy.getTimeInMillis() - justNow.getTimeInMillis();
         builder.append("Before copying is left ").append(dt / 1000).append(", sec \n");
         Files.write(LOG, builder.toString().getBytes(), StandardOpenOption.APPEND);
+
+
         builder.setLength(0);
         Thread.sleep(dt);
 //endregion
@@ -123,7 +126,7 @@ public class Main {
 
         //region log
 
-        builder.append("end copy. Copy time ").append(new SimpleDateFormat("YYYY.MM.DD_H.mm").format(Calendar.getInstance().getTime())).append(" sec. \n");
+        builder.append("end copy. Copy time ").append(new SimpleDateFormat("YYYY.MM.ddH.mm").format(Calendar.getInstance().getTime())).append(" sec. \n");
         Files.write(LOG, builder.toString().getBytes(), StandardOpenOption.APPEND);
         builder.setLength(0);
         //endregion
