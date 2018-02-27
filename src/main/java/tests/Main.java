@@ -22,7 +22,7 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
        MyFile src = new MyFile(SRC, SRC);
-       MyFile dst = new MyFile(DST, SRC);
+       MyFile dst = new MyFile(DST, DST);
 
           src.sync(dst);
 

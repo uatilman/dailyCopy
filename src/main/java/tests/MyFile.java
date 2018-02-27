@@ -1,12 +1,12 @@
 package tests;
 
-import java.io.File;
+import org.apache.commons.io.FileUtils;
+
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.*;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
@@ -43,52 +43,90 @@ public class MyFile implements Serializable, Comparable {
         }
     }
 
-    public void sync(MyFile dst) {
+    public void sync(MyFile dst) throws IOException {
         List<MyFile> removeList = new ArrayList<>();
 
         for (int i = 0; i < childList.size(); i++) {
             MyFile currentSrc = childList.get(i);
+            List<MyFile> dstChildList = dst.childList;
             if (currentSrc.isDir) { // если папка
-                if (dst.getChildList().contains(currentSrc)) { //если название и время изменения папки совпадают
-                    currentSrc.sync(dst.getChildList().get(dst.getChildList().indexOf(currentSrc))); // далее рекурсию можно будет удалить, когда появится изменение даты папки
+
+                int index = currentSrc.containByName(dstChildList);
+
+//                if (dstChildList.contains(currentSrc)) { //если название и время изменения папки совпадают
+//                    removeList.add(currentSrc);
+//
+//                    currentSrc.sync(dstChildList.get(index));
+
+//                } else { // если полного совпадения нет
+
+                if (index >= 0) {// если совпадают имена  уходим в рекурсию
+                    MyFile currentDst = dstChildList.get(index);
+                    currentSrc.sync(currentDst);
+                    Files.setLastModifiedTime(dst.root.resolve(dst.getPath()), FileTime.fromMillis(currentSrc.time)); //актуально для случая несовпадения по time !dstChildList.contains(currentSrc)
+                    removeList.add(currentDst);
+                } else { //если имени в целевом списке нет - копируем папку целиком
+                    Path srcDir = currentSrc.root.resolve(currentSrc.path);
+                    Path newDir = Paths.get(dst.root.resolve(dst.path).toString(), currentSrc.path.toString());
+                    Files.createDirectory(newDir);
+                    FileUtils.copyDirectory(
+                            srcDir.toFile(),
+                            newDir.toFile(),
+                            true
+                    );
+                    Files.setLastModifiedTime(newDir, FileTime.fromMillis(currentSrc.time));
                     removeList.add(currentSrc);
-                    continue;
-
-                } else { // если полного совпадения нет
-                    if (currentSrc.containName(dst.getChildList())){// если совпадают имена todo containName - вовзращать -1 если лож,
-                        // сравнение по времени todo а лучше уйти в рекурсию
-                    } else { //если имени в целевом списке нет
-                        //копирвать папку целиком //todo вопрос, отпал, дочки сами уйдут
-                    }
-
-
-
-
                 }
+//                }
 
             } else { // если файл
+                if (dstChildList.contains(currentSrc)) { // если файлы одинаковые todo вынести для файла и папки в первый блок цикла
+                    removeList.add(currentSrc);
 
+                } else { // если полного совпадения нет
+                    int index;
+                    if ((index = currentSrc.containByName(dstChildList)) >= 0) {// если совпадают имена
+                        MyFile currentDst = dstChildList.get(index);
+                        if (currentSrc.isNewer(currentDst)) { // если исходный файл новее
+                            System.out.println("debug before Delete ");
+                            removeList.add(currentDst);//todo из-за этой строчки приходится прописывать в каждом условии
+
+                            Path dstPath = currentDst.root.resolve(currentDst.path);
+                            Path srcPath = currentSrc.root.resolve(currentSrc.path);
+
+                            Files.delete(dstPath);
+                            FileUtils.copyFile(srcPath.toFile(), dstPath.toFile());
+                        } else { //новее файл в резервной копии
+                            // этого неможет быть
+                            System.err.println(
+                                    "В резервном хранилище файл новее. " +
+                                            "\n\t Исхожный файл: " + currentSrc + "-  " + FileTime.fromMillis(currentSrc.time) +
+                                            "\n\t Резервный файл: " + currentDst + "-  " + FileTime.fromMillis(currentDst.time));
+                        }
+                    } else { // если нет резервной копии файла
+                        Path srcPath = currentSrc.root.resolve(currentSrc.path);
+                        Path dstPath = Paths.get(dst.root.resolve(dst.path).toString(), currentSrc.path.toString());
+
+                        FileUtils.copyFile(srcPath.toFile(), dstPath.toFile(), true);
+                    }
+                }
             }
-
-//
-//            else if (dst.getChildList().contains(currentSrc)) {
-//                removeSrcList.add(currentSrc);
-//                removeDstList.add(currentSrc);
-//                continue;
-//            } else {
-//
-//            }
-
-
         }
+
+        dst.childList.removeAll(removeList);
+        if (dst.childList.size() != 0) {
+            System.err.println("в резервном листе остались файды \n" + dst.childList);
+        }
+
     }
 
-    public boolean containName(List<MyFile> another) {
-        if (another == null) return false;
-        for (MyFile m : another) {
-            if (m.getPath().toString().equals(getPath().toString())) return true;
+    public int containByName(List<MyFile> another) {
+        if (another == null) return -1;
+        for (int i = 0; i < another.size(); i++) {
+            MyFile m = another.get(i);
+            if (m.getPath().toString().equals(getPath().toString())) return i;
         }
-        return false;
+        return -1;
     }
 
     public boolean isDir() {
