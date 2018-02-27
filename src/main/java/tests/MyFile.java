@@ -17,9 +17,12 @@ public class MyFile implements Serializable, Comparable {
     private List<MyFile> childList;
     private long time;
     private Path root;
+    private Path absPath;// TODO: 27.02.2018 ПРИМЕНИТЬ ДАННЫЙ МЕТОД
+
     private boolean isDir;
 
     public MyFile(Path path, Path root) {
+        this.absPath = path;
         this.path = root.toAbsolutePath().relativize(path.toAbsolutePath());
         this.root = root;
 
@@ -47,52 +50,39 @@ public class MyFile implements Serializable, Comparable {
         List<MyFile> removeList = new ArrayList<>();
 
         for (int i = 0; i < childList.size(); i++) {
-            MyFile currentSrc = childList.get(i);
             List<MyFile> dstChildList = dst.childList;
+            MyFile currentSrc = childList.get(i);
+            int index = currentSrc.containByName(dstChildList); // индекс ткущего элемента в целевом списке
+            MyFile currentDst = index >= 0 ? dstChildList.get(index) : null;
+
+            Path srcPath = currentSrc.root.resolve(currentSrc.path);
+            Path dstPath = currentDst != null ?
+                    currentDst.root.resolve(currentDst.path) :
+                    Paths.get(dst.root.resolve(dst.path).toString(), currentSrc.path.toString());
+
+
             if (currentSrc.isDir) { // если папка
-
-                int index = currentSrc.containByName(dstChildList);
-
-//                if (dstChildList.contains(currentSrc)) { //если название и время изменения папки совпадают
-//                    removeList.add(currentSrc);
-//
-//                    currentSrc.sync(dstChildList.get(index));
-
-//                } else { // если полного совпадения нет
-
-                if (index >= 0) {// если совпадают имена  уходим в рекурсию
-                    MyFile currentDst = dstChildList.get(index);
+                if (currentDst != null) {// если совпадают имена  уходим в рекурсию
                     currentSrc.sync(currentDst);
-                    Files.setLastModifiedTime(dst.root.resolve(dst.getPath()), FileTime.fromMillis(currentSrc.time)); //актуально для случая несовпадения по time !dstChildList.contains(currentSrc)
-                    removeList.add(currentDst);
+                    Files.setLastModifiedTime(dst.root.resolve(dst.path), FileTime.fromMillis(currentSrc.time)); //актуально для случая несовпадения по time !dstChildList.contains(currentSrc)
                 } else { //если имени в целевом списке нет - копируем папку целиком
-                    Path srcDir = currentSrc.root.resolve(currentSrc.path);
-                    Path newDir = Paths.get(dst.root.resolve(dst.path).toString(), currentSrc.path.toString());
-                    Files.createDirectory(newDir);
-                    FileUtils.copyDirectory(
-                            srcDir.toFile(),
-                            newDir.toFile(),
-                            true
-                    );
-                    Files.setLastModifiedTime(newDir, FileTime.fromMillis(currentSrc.time));
-                    removeList.add(currentSrc);
+                    Files.createDirectory(dstPath);
+                    FileUtils.copyDirectory(srcPath.toFile(),dstPath.toFile(),true);
+                    Files.setLastModifiedTime(dstPath, FileTime.fromMillis(currentSrc.time));
                 }
-//                }
-
+                removeList.add(currentSrc);
             } else { // если файл
                 if (dstChildList.contains(currentSrc)) { // если файлы одинаковые todo вынести для файла и папки в первый блок цикла
                     removeList.add(currentSrc);
 
                 } else { // если полного совпадения нет
-                    int index;
-                    if ((index = currentSrc.containByName(dstChildList)) >= 0) {// если совпадают имена
-                        MyFile currentDst = dstChildList.get(index);
+//                    int index = currentSrc.containByName(dstChildList);
+                    if (currentDst != null) {// если совпадают имена
                         if (currentSrc.isNewer(currentDst)) { // если исходный файл новее
                             System.out.println("debug before Delete ");
                             removeList.add(currentDst);//todo из-за этой строчки приходится прописывать в каждом условии
 
-                            Path dstPath = currentDst.root.resolve(currentDst.path);
-                            Path srcPath = currentSrc.root.resolve(currentSrc.path);
+
 
                             Files.delete(dstPath);
                             FileUtils.copyFile(srcPath.toFile(), dstPath.toFile());
@@ -104,8 +94,7 @@ public class MyFile implements Serializable, Comparable {
                                             "\n\t Резервный файл: " + currentDst + "-  " + FileTime.fromMillis(currentDst.time));
                         }
                     } else { // если нет резервной копии файла
-                        Path srcPath = currentSrc.root.resolve(currentSrc.path);
-                        Path dstPath = Paths.get(dst.root.resolve(dst.path).toString(), currentSrc.path.toString());
+
 
                         FileUtils.copyFile(srcPath.toFile(), dstPath.toFile(), true);
                     }
