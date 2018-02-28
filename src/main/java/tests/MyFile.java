@@ -12,25 +12,22 @@ import java.util.stream.Collectors;
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 
 public class MyFile implements Serializable, Comparable {
-    //    private Map<String, Object> attributeMap;
     private Path path;
     private List<MyFile> childList;
     private long time;
-    private Path root;
-    private Path absPath;// TODO: 27.02.2018 ПРИМЕНИТЬ ДАННЫЙ МЕТОД
+    private Path absPath;
 
     private boolean isDir;
 
     public MyFile(Path path, Path root) {
+
         this.absPath = path;
         this.path = root.toAbsolutePath().relativize(path.toAbsolutePath());
-        this.root = root;
 
         if (Files.isDirectory(path)) {
             this.isDir = true;
             try {
-                this.childList = Files.list(path).map((Path path1) -> new MyFile(path1, root)).collect(Collectors.toList());
-                Collections.sort(childList);
+                this.childList = Files.list(path).filter(MyFile::isHidden).map(path1 -> new MyFile(path1, root)).sorted().collect(Collectors.toList());
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -46,6 +43,10 @@ public class MyFile implements Serializable, Comparable {
         }
     }
 
+    private static boolean isHidden(Path path) {
+        return !path.getFileName().toString().startsWith("~");
+    }
+
     public void sync(MyFile dst) throws IOException {
         List<MyFile> removeList = new ArrayList<>();
 
@@ -55,35 +56,26 @@ public class MyFile implements Serializable, Comparable {
             int index = currentSrc.containByName(dstChildList); // индекс ткущего элемента в целевом списке
             MyFile currentDst = index >= 0 ? dstChildList.get(index) : null;
 
-            Path srcPath = currentSrc.root.resolve(currentSrc.path);
+            Path srcPath = currentSrc.absPath;
             Path dstPath = currentDst != null ?
-                    currentDst.root.resolve(currentDst.path) :
-                    Paths.get(dst.root.resolve(dst.path).toString(), currentSrc.path.toString());
-
+                    currentDst.absPath :
+                    Paths.get(dst.absPath.toString(), currentSrc.path.toString());
+            // TODO: 28.02.2018 отдельный блок вначале синхронизации с проверкой на полное совпадение - логично только для файлов, т.к. сравнение папок по дате и названию ненадежно
+            // TODO: 28.02.2018 перенос в корзину вместо удаления - если перенос без архива, операция быстрая т.к. файл меняется не сильно.
 
             if (currentSrc.isDir) { // если папка
-                if (currentDst != null) {// если совпадают имена  уходим в рекурсию
+                if (currentDst != null) {// если папка существует
                     currentSrc.sync(currentDst);
-                    Files.setLastModifiedTime(dst.root.resolve(dst.path), FileTime.fromMillis(currentSrc.time)); //актуально для случая несовпадения по time !dstChildList.contains(currentSrc)
                 } else { //если имени в целевом списке нет - копируем папку целиком
                     Files.createDirectory(dstPath);
-                    FileUtils.copyDirectory(srcPath.toFile(),dstPath.toFile(),true);
-                    Files.setLastModifiedTime(dstPath, FileTime.fromMillis(currentSrc.time));
+                    FileUtils.copyDirectory(srcPath.toFile(), dstPath.toFile());
                 }
-                removeList.add(currentSrc);
-            } else { // если файл
-                if (dstChildList.contains(currentSrc)) { // если файлы одинаковые todo вынести для файла и папки в первый блок цикла
-                    removeList.add(currentSrc);
+                Files.setLastModifiedTime(dstPath, FileTime.fromMillis(currentSrc.time));
 
-                } else { // если полного совпадения нет
-//                    int index = currentSrc.containByName(dstChildList);
+            } else { // если файл
+                if (!dstChildList.contains(currentSrc)) { // если файлы не одинаковые
                     if (currentDst != null) {// если совпадают имена
                         if (currentSrc.isNewer(currentDst)) { // если исходный файл новее
-                            System.out.println("debug before Delete ");
-                            removeList.add(currentDst);//todo из-за этой строчки приходится прописывать в каждом условии
-
-
-
                             Files.delete(dstPath);
                             FileUtils.copyFile(srcPath.toFile(), dstPath.toFile());
                         } else { //новее файл в резервной копии
@@ -94,17 +86,24 @@ public class MyFile implements Serializable, Comparable {
                                             "\n\t Резервный файл: " + currentDst + "-  " + FileTime.fromMillis(currentDst.time));
                         }
                     } else { // если нет резервной копии файла
-
-
                         FileUtils.copyFile(srcPath.toFile(), dstPath.toFile(), true);
                     }
                 }
             }
+            removeList.add(currentDst);
         }
-
         dst.childList.removeAll(removeList);
         if (dst.childList.size() != 0) {
-            System.err.println("в резервном листе остались файды \n" + dst.childList);
+            System.err.println("в резервном листе остались файлы \n" + dst.childList);
+            dst.childList.forEach(myFile -> {
+                try {
+                    FileUtils.forceDelete(myFile.absPath.toFile());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+
+
         }
 
     }
