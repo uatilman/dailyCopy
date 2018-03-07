@@ -1,174 +1,223 @@
+
+//import org.apache.commons.codec.digest.DigestUtils;
+
+import javax.swing.*;
+import java.awt.*;
 import java.io.IOException;
+
+import java.net.URL;
 import java.nio.file.*;
-import java.nio.file.attribute.FileTime;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.logging.*;
 
+import static java.util.logging.Level.*;
+import static java.util.logging.Level.SEVERE;
+
+// TODO: 07.03.2018 скомпилировать +
+// TODO: 07.03.2018 настройки
+// TODO: 07.03.2018 статус в зоголовке меню
 public class Main {
-    private static StringBuilder builder = new StringBuilder();
-    private final static Path LOG = Paths.get("copylog.txt");
-    private final static Path SETTINGS_FILE = Paths.get("pref.txt");
-    private static List<Path> srcDailyList = new ArrayList<>();
-    private static List<Path> srcFridayList = new ArrayList<>();
-    private static Calendar startSmallCopy;
-    private static Calendar startAllCopy;
-    private static Calendar justNow;
+    public static final Logger LOGGER = Logger.getLogger(MyFile.class.getName());
+    private static final Path SRC = Paths.get("\\\\SRVFILES\\tppdocs\\АО\\АО").toAbsolutePath();
+    private static final Path DST = Paths.get("E:\\AutoSync").toAbsolutePath();
+    private static final Path TRASH_PATH = Paths.get("E:\\AutoSync\\trash").toAbsolutePath();
+    private static Handler fileHandlerException;
+    private static Handler fileHandlerInfo;
+    private static long lastModificationTime = -1;
+    private static MenuItem labelItem;
 
-    public static void main(String[] args) throws IOException, InterruptedException {
-        try {
-            justNow = Calendar.getInstance();
-            startSmallCopy = Calendar.getInstance();
-            startAllCopy = Calendar.getInstance();
-// TODO: 19.02.2018 replace DD - day in year to dd - day in month
+    private static ExecutorService executorService;
+    private static ExecutorService menuExecutorService;
 
-            builder.append(new SimpleDateFormat("YYYY.MM.dd_H.mm").format(justNow.getTime()));
-            builder.append("\n");
-            Files.write(LOG, builder.toString().getBytes(), StandardOpenOption.APPEND);
-            builder.setLength(0);
-            setSettings();
+    public static void main(String[] args) {
+        initLogger();
 
+        executorService = Executors.newFixedThreadPool(1);
+        menuExecutorService = Executors.newFixedThreadPool(1);
+        SwingUtilities.invokeLater(Main::createAndShowGUI);
 
-            if ((justNow.get(Calendar.DAY_OF_WEEK) - 1) != 5) {
-                prepareCopy(startSmallCopy, srcDailyList, "daily_copy");
-            } else {
-                prepareCopy(startAllCopy, srcFridayList, "friday_copy");
+        while (true) {
+
+            try {
+                executorService.execute(Main::start);
+
+                Main.LOGGER.log(INFO, "start sleep");
+                Thread.sleep(300000);
+                Main.LOGGER.log(INFO, "close sleep");
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                break;
             }
-        } catch (Exception e) {
-            Files.write(LOG, e.getMessage().getBytes(), StandardOpenOption.APPEND);
+
+        }
+        close();
+    }
+
+    private static void close() {
+        fileHandlerException.close();
+        fileHandlerInfo.close();
+    }
+
+    private static void start() {
+        long t;
+        long t1;
+
+        MyFile src;
+        MyFile dst;
+        try {
+            Main.LOGGER.log(INFO, "start sync ===========================");
+
+            t = System.currentTimeMillis();
+            src = new MyFile(SRC, SRC, TRASH_PATH);
+
+            t1 = System.currentTimeMillis();
+            Main.LOGGER.log(INFO, "Time to get src tree, seconds: " + (t1 - t) / 1000);
+
+            dst = new MyFile(DST, DST, TRASH_PATH);
+            t = System.currentTimeMillis();
+            Main.LOGGER.log(INFO, "Time to get dst tree, seconds: " + (t - t1) / 1000);
+
+            src.sync(dst);
+            t1 = System.currentTimeMillis();
+            Main.LOGGER.log(INFO, "Time to sync, seconds: " + (t1 - t) / 1000);
+
+        } catch (Exception | Error e) {
+            LOGGER.log(WARNING, "", e);
+            e.printStackTrace();
+        }
+        lastModificationTime = System.currentTimeMillis();
+
+
+
+
+        Main.LOGGER.log(INFO, "close sync ===========================");
+
+        //todo !!! это неработает, т.к. вызывается в потоке executorService - вроде порождая дочерний поток. попробовать wait/notify?
+       menuExecutorService.execute(Main::updateLabel);
+    }
+
+    private static void updateLabel() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        if (executorService.isTerminated()) {
+            labelItem.setLabel("Модифицировано " + new SimpleDateFormat("YYYY.MM.dd_H.mm").format(new Date(lastModificationTime)));
+        } else {
+            labelItem.setLabel("Идет синхронизация. " + "Модифицировано " + new SimpleDateFormat("H.mm").format(new Date(lastModificationTime)));
+
+        }
+    }
+
+    private static void initLogger() {
+        LOGGER.setLevel(ALL);
+        LOGGER.setUseParentHandlers(false);
+
+        try {
+            fileHandlerException = new FileHandler(
+                    "exception_log_" +
+                            new SimpleDateFormat("YYYY.MM.dd_H.mm.s").format(Calendar.getInstance().getTime()) +
+                            ".log"
+            );
+            fileHandlerException.setFormatter(new SimpleFormatter());
+            fileHandlerException.setLevel(WARNING);
+            fileHandlerException.setEncoding("UTF-8");
+            LOGGER.addHandler(fileHandlerException);
+
+
+            fileHandlerInfo = new FileHandler(
+                    "info_log_" +
+                            new SimpleDateFormat("YYYY.MM.dd_H.mm.s").format(Calendar.getInstance().getTime()) +
+                            ".log"
+
+            );
+            fileHandlerInfo.setFormatter(new SimpleFormatter());
+            fileHandlerInfo.setLevel(CONFIG);
+            fileHandlerInfo.setEncoding("UTF-8");
+            fileHandlerInfo.setFilter(record -> record.getLevel().equals(INFO));
+            LOGGER.addHandler(fileHandlerInfo);
+
+
+            Handler consoleHandler = new ConsoleHandler();
+            consoleHandler.setLevel(SEVERE);
+            LOGGER.addHandler(consoleHandler);
+
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private static void setSettings() throws IOException {
-        List<String> settings = Files.readAllLines(SETTINGS_FILE);
-        for (int i = 0; i < settings.size(); i++) {
-            switch (settings.get(i)) {
-                case "#Every Day":
-                    i++;
-                    while (settings.get(i).startsWith("\\\\") && i < settings.size()) {
-                        srcDailyList.add(Paths.get(settings.get(i++)));
-                    }
-                    break;
-                case "#Every Week":
-                    i++;
-                    while (settings.get(i).startsWith("\\\\") && i < settings.size()) {
-                        srcFridayList.add(Paths.get(settings.get(i++)));
-                    }
-                    break;
-                case "#Daily hour start time:":
-                    if (i >= settings.size()) break;
-                    try {
-                        startSmallCopy.set(Calendar.HOUR_OF_DAY, Integer.parseInt(settings.get(++i)));
-                        System.out.println(Integer.parseInt(settings.get(i)));
+    private static void createAndShowGUI() {
+        //Check the SystemTray support
+        if (!SystemTray.isSupported()) {
+            LOGGER.log(WARNING, "SystemTray is not supported");
+            return;
+        }
+        final PopupMenu popup = new PopupMenu();
+        final TrayIcon trayIcon = new TrayIcon(createImage("images/bulb.gif", "tray icon"));
+        trayIcon.setImageAutoSize(true);
+        final SystemTray tray = SystemTray.getSystemTray();
 
-                    } catch (NumberFormatException e) {
-                        //TODO записать в лог
-                    }
-                    break;
-                case "#Daily minutes start time:":
-                    if (i >= settings.size()) break;
-                    try {
-                        startSmallCopy.set(Calendar.MINUTE, Integer.parseInt(settings.get(++i)));
-                        System.out.println(Integer.parseInt(settings.get(i)));
-                    } catch (NumberFormatException e) {
-                        //TODO записать в лог
-                    }
-                    break;
 
-                case "#Friday hour start time:":
-                    if (i >= settings.size()) break;
-                    try {
-                        startAllCopy.set(Calendar.HOUR_OF_DAY, Integer.parseInt(settings.get(++i)));
-                    } catch (NumberFormatException e) {
-                        //TODO записать в лог
-                    }
-                    break;
-                case "#Friday minutes start time:":
-                    if (i >= settings.size()) break;
-                    try {
-                        startAllCopy.set(Calendar.MINUTE, Integer.parseInt(settings.get(++i)));
-                    } catch (NumberFormatException e) {
-                        //TODO записать в лог
-                    }
-                    break;
-                default:
-                    break;
-            }
+        MenuItem aboutItem = new MenuItem("About");
+//        if (lastModificationTime > 0)
+//            labelItem = new MenuItem("Модифицировано " + new SimpleDateFormat("YYYY.MM.dd_H.mm").format(new Date(lastModificationTime)));
+//        else
+        labelItem = new MenuItem("Первая синхронизация после запуска");
+
+        MenuItem updateItem = new MenuItem("Обновить");
+        MenuItem exitItem = new MenuItem("Выйти");
+
+        popup.add(labelItem);
+        popup.addSeparator();
+        popup.add(aboutItem);
+        popup.addSeparator();
+        popup.add(updateItem);
+        popup.addSeparator();
+        popup.add(exitItem);
+
+        trayIcon.setPopupMenu(popup);
+
+        try {
+            tray.add(trayIcon);
+        } catch (AWTException e) {
+            LOGGER.log(WARNING, "TrayIcon could not be added.");
+            return;
+        }
+
+        trayIcon.addActionListener(e -> JOptionPane.showMessageDialog(null,
+                "Программа синхронизации запущена"));
+
+        aboutItem.addActionListener(e -> JOptionPane.showMessageDialog(null,
+                "Программа синхронизирует сетевую папку с жестким диском 1 раз в минуту или по запросу"));
+
+        updateItem.addActionListener(e -> {
+            LOGGER.log(INFO, "нажата кнопка обновить");
+            executorService.execute(Main::start);
+        });
+
+        exitItem.addActionListener(e -> {
+            close();
+            tray.remove(trayIcon);
+            System.exit(0);
+        });
+    }
+
+    private static Image createImage(String path, String description) {
+        URL imageURL = TrayIconDemo.class.getResource(path);
+
+        if (imageURL == null) {
+            LOGGER.log(WARNING, "Resource not found: " + path);
+            return null;
+        } else {
+            return (new ImageIcon(imageURL, description)).getImage();
         }
     }
 
-    private static void prepareCopy(Calendar startCopy, List<Path> srcList, String type) throws IOException, InterruptedException {
-        Path dst;
-        dst = Paths.get("E:\\" + new SimpleDateFormat("YYYY.MM.dd_H.mm").format(startCopy.getTime()) + "_test" + type);
-
-        if (!Files.exists(dst))
-            Files.createDirectory(dst);
-//region log/sleep
-        long dt = startCopy.getTimeInMillis() - justNow.getTimeInMillis();
-        builder.append("Before copying is left ").append(dt / 1000).append(", sec \n");
-        Files.write(LOG, builder.toString().getBytes(), StandardOpenOption.APPEND);
-
-
-        builder.setLength(0);
-        Thread.sleep(dt);
-//endregion
-        Files.write(LOG, builder.toString().getBytes(), StandardOpenOption.APPEND);
-        builder.setLength(0);
-
-        for (Path path : srcList) {
-            Path dstLocal = Paths.get(dst.toString() + "\\" + path.getFileName());
-            if (!Files.exists(dstLocal))
-                Files.createDirectory(dstLocal);
-            copy(path, dstLocal);
-            Files.setLastModifiedTime(dstLocal, Files.getLastModifiedTime(path));
-        }
-
-        //region log
-
-        builder.append("end copy. Copy time ").append(new SimpleDateFormat("YYYY.MM.ddH.mm").format(Calendar.getInstance().getTime())).append(" sec. \n");
-        Files.write(LOG, builder.toString().getBytes(), StandardOpenOption.APPEND);
-        builder.setLength(0);
-        //endregion
-    }
-
-    private static void copy(Path source, Path target) {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(source)) {
-            for (Path file : stream) {
-                System.out.println(file.getFileName());
-//TODO add and test nio method Files.isDirectory(path)
-                if (file.toFile().isFile()) {
-
-                    Files.copy(
-                            file,
-                            target.resolve(source.relativize(file)),
-                            StandardCopyOption.COPY_ATTRIBUTES);
-                } else {
-                    Path newDir = target.resolve(source.relativize(file));
-                    try {
-                        Files.copy(file, newDir, StandardCopyOption.COPY_ATTRIBUTES);
-                    } catch (FileAlreadyExistsException x) {
-                        System.err.println(x.getMessage());
-                    }
-
-                    copy(file, newDir);
-
-                    FileTime time = Files.getLastModifiedTime(file);
-                    Files.setLastModifiedTime(newDir, time);
-                }
-
-
-            }
-        } catch (IOException | DirectoryIteratorException x) {
-            // IOException не может броситься во время итерации.
-            // В этом куске кода оно может броситься только
-            // методом newDirectoryStream.
-            System.err.println(x);
-        }
-    }
-
-//region old
-
-//endregion
 
 }
