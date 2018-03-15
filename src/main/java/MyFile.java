@@ -3,12 +3,14 @@
 import org.apache.commons.io.*;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.*;
 import java.nio.file.attribute.FileTime;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,12 +40,20 @@ public class MyFile implements Serializable, Comparable {
             try (Stream<Path> str = Files.list(path)) {
                 this.childList = str
                         .filter(path2 -> !path2.getFileName().toString().equals(trash.getFileName().toString()))
+                        .filter((Path path12) -> {
+                            try {
+                                return !Files.isHidden(path12);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                                return false;
+                            }
+                        })
                         .map(path1 -> new MyFile(path1, root, trash))
                         .sorted()
                         .collect(Collectors.toList());
             } catch (IOException e) {
-                Main.LOGGER.log(WARNING, "", e);
                 e.printStackTrace();
+                Main.LOGGER.log(WARNING, "", e);
             }
         } else {
             this.isDir = false;
@@ -53,8 +63,8 @@ public class MyFile implements Serializable, Comparable {
         try {
             this.time = Files.getLastModifiedTime(path, NOFOLLOW_LINKS).toMillis();
         } catch (IOException e) {
-            Main.LOGGER.log(WARNING, "", e);
             e.printStackTrace();
+            Main.LOGGER.log(WARNING, "", e);
         }
     }
 
@@ -73,6 +83,9 @@ public class MyFile implements Serializable, Comparable {
                         Paths.get(dst.root.toString(), currentSrc.path.toString());
 
                 if (currentSrc.isDir) { // если папка
+                    if (currentSrc.absPath.toString().contains("Реестры")){
+                        System.out.println(currentSrc.absPath.toString());
+                    }
                     try {
                         if (currentDst != null) {// если папка существует
                             currentSrc.sync(currentDst);
@@ -83,6 +96,7 @@ public class MyFile implements Serializable, Comparable {
                         }
                         Files.setLastModifiedTime(dstPath, FileTime.fromMillis(currentSrc.time));
                     } catch (NoSuchFileException e) {
+                        e.printStackTrace();
                         Main.LOGGER.log(WARNING, "Длинное имя or ...", e);
                     }
                 } else { // если файл
@@ -99,8 +113,13 @@ public class MyFile implements Serializable, Comparable {
                                         "\n\t Резервный файл: " + currentDst + "-  " + FileTime.fromMillis(currentDst.time));
                             }
                         } else { // если нет резервной копии файла
-                            FileUtils.copyFile(srcPath.toFile(), dstPath.toFile(), true);
-                            Main.LOGGER.log(INFO, srcPath + " не найден и скопирован.");
+                            try {
+                                FileUtils.copyFile(srcPath.toFile(), dstPath.toFile(), true);
+                                Main.LOGGER.log(INFO, srcPath + " не найден и скопирован.");
+                            } catch (FileNotFoundException e) {
+                                e.printStackTrace();
+                                Main.LOGGER.log(INFO, srcPath + " Файл занят. " + e.getMessage());
+                            }
                         }
                     }
                 }
@@ -113,8 +132,8 @@ public class MyFile implements Serializable, Comparable {
                 dst.childList.forEach(this::moveOnce);
             }
         } catch (IOException e) {
-            Main.LOGGER.log(WARNING, "", e);
             e.printStackTrace();
+            Main.LOGGER.log(WARNING, "", e);
         }
     }
 
@@ -143,8 +162,8 @@ public class MyFile implements Serializable, Comparable {
             Main.LOGGER.log(INFO, " rename " + dirInTrashOldName + " to " + dirInTrashNewName + " result: " + renameResult);
 
         } catch (IOException e) {
+            e.printStackTrace();
             Main.LOGGER.log(WARNING, "", e);
-//            e.printStackTrace();
         }
     }
 

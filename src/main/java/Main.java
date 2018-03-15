@@ -1,10 +1,6 @@
-
-//import org.apache.commons.codec.digest.DigestUtils;
-
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
-
 import java.net.URL;
 import java.nio.file.*;
 import java.text.SimpleDateFormat;
@@ -12,13 +8,11 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.*;
+import java.util.logging.Formatter;
 
 import static java.util.logging.Level.*;
 import static java.util.logging.Level.SEVERE;
 
-// TODO: 07.03.2018 скомпилировать +
-// TODO: 07.03.2018 настройки
-// TODO: 07.03.2018 статус в зоголовке меню
 public class Main {
     public static final Logger LOGGER = Logger.getLogger(MyFile.class.getName());
     private static final Path SRC = Paths.get("\\\\SRVFILES\\tppdocs\\АО\\АО").toAbsolutePath();
@@ -26,25 +20,31 @@ public class Main {
     private static final Path TRASH_PATH = Paths.get("E:\\AutoSync\\trash").toAbsolutePath();
     private static Handler fileHandlerException;
     private static Handler fileHandlerInfo;
+    private static Handler consoleHandlerInfo;
     private static long lastModificationTime = -1;
     private static MenuItem labelItem;
-
-    private static ExecutorService executorService;
-    private static ExecutorService menuExecutorService;
+    private static boolean isStart = false;
+    private static Thread startThread;
 
     public static void main(String[] args) {
         initLogger();
 
-        executorService = Executors.newFixedThreadPool(1);
-        menuExecutorService = Executors.newFixedThreadPool(1);
+        ExecutorService menuExecutorService = Executors.newFixedThreadPool(1);
         SwingUtilities.invokeLater(Main::createAndShowGUI);
 
         while (true) {
-
             try {
-                executorService.execute(Main::start);
-
+                if (!isStart) {
+//                    startThread = new Thread(Main::prepareStartThread);
+//                    startThread.prepareStartThread();
+//                    startThread.join();
+                    prepareStartThread();
+                    startThread.start();
+                    startThread.join();
+                    menuExecutorService.execute(Main::updateLabel);
+                }
                 Main.LOGGER.log(INFO, "start sleep");
+
                 Thread.sleep(300000);
                 Main.LOGGER.log(INFO, "close sleep");
 
@@ -57,56 +57,53 @@ public class Main {
         close();
     }
 
-    private static void close() {
-        fileHandlerException.close();
-        fileHandlerInfo.close();
-    }
 
-    private static void start() {
-        long t;
-        long t1;
+    private static void prepareStartThread() {
+        startThread = new Thread(() -> {
+            isStart = true;
+            long t;
+            long t1;
 
-        MyFile src;
-        MyFile dst;
-        try {
-            Main.LOGGER.log(INFO, "start sync ===========================");
+            MyFile src;
+            MyFile dst;
+            try {
+                LOGGER.log(INFO, "prepareStartThread sync ===========================");
 
-            t = System.currentTimeMillis();
-            src = new MyFile(SRC, SRC, TRASH_PATH);
+                t = System.currentTimeMillis();
+                src = new MyFile(SRC, SRC, TRASH_PATH);
 
-            t1 = System.currentTimeMillis();
-            Main.LOGGER.log(INFO, "Time to get src tree, seconds: " + (t1 - t) / 1000);
+                t1 = System.currentTimeMillis();
+                LOGGER.log(INFO, "Time to get src tree, seconds: " + (t1 - t) / 1000);
 
-            dst = new MyFile(DST, DST, TRASH_PATH);
-            t = System.currentTimeMillis();
-            Main.LOGGER.log(INFO, "Time to get dst tree, seconds: " + (t - t1) / 1000);
+                dst = new MyFile(DST, DST, TRASH_PATH);
+                t = System.currentTimeMillis();
+                LOGGER.log(INFO, "Time to get dst tree, seconds: " + (t - t1) / 1000);
 
-            src.sync(dst);
-            t1 = System.currentTimeMillis();
-            Main.LOGGER.log(INFO, "Time to sync, seconds: " + (t1 - t) / 1000);
+                src.sync(dst);
+                t1 = System.currentTimeMillis();
+                LOGGER.log(INFO, "Time to sync, seconds: " + (t1 - t) / 1000);
 
-        } catch (Exception | Error e) {
-            LOGGER.log(WARNING, "", e);
-            e.printStackTrace();
-        }
-        lastModificationTime = System.currentTimeMillis();
+            } catch (Exception | Error e) {
+                LOGGER.log(WARNING, "", e);
+                e.printStackTrace();
+            }
+            lastModificationTime = System.currentTimeMillis();
+
+            LOGGER.log(INFO, "close sync ===========================");
+
+            isStart = false;
+        });
 
 
-
-
-        Main.LOGGER.log(INFO, "close sync ===========================");
-
-        //todo !!! это неработает, т.к. вызывается в потоке executorService - вроде порождая дочерний поток. попробовать wait/notify?
-       menuExecutorService.execute(Main::updateLabel);
     }
 
     private static void updateLabel() {
         try {
-            Thread.sleep(1000);
+            Thread.sleep(2000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        if (executorService.isTerminated()) {
+        if (!isStart) {
             labelItem.setLabel("Модифицировано " + new SimpleDateFormat("YYYY.MM.dd_H.mm").format(new Date(lastModificationTime)));
         } else {
             labelItem.setLabel("Идет синхронизация. " + "Модифицировано " + new SimpleDateFormat("H.mm").format(new Date(lastModificationTime)));
@@ -142,10 +139,11 @@ public class Main {
             fileHandlerInfo.setFilter(record -> record.getLevel().equals(INFO));
             LOGGER.addHandler(fileHandlerInfo);
 
+            consoleHandlerInfo = new ConsoleHandler();
+            consoleHandlerInfo.setLevel(CONFIG);
+            consoleHandlerInfo.setFilter(record -> record.getLevel().equals(INFO));
+            LOGGER.addHandler(consoleHandlerInfo);
 
-            Handler consoleHandler = new ConsoleHandler();
-            consoleHandler.setLevel(SEVERE);
-            LOGGER.addHandler(consoleHandler);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -198,7 +196,16 @@ public class Main {
 
         updateItem.addActionListener(e -> {
             LOGGER.log(INFO, "нажата кнопка обновить");
-            executorService.execute(Main::start);
+
+            if (!isStart) {
+//                new Thread(Main::prepareStartThread).start();
+
+                prepareStartThread();
+                startThread.start();
+            } else {
+                JOptionPane.showMessageDialog(null,
+                        "Синхронизация уже идет");
+            }
         });
 
         exitItem.addActionListener(e -> {
@@ -219,5 +226,9 @@ public class Main {
         }
     }
 
-
+    private static void close() {
+        fileHandlerException.close();
+        fileHandlerInfo.close();
+        consoleHandlerInfo.close();
+    }
 }
