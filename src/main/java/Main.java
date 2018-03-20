@@ -26,11 +26,26 @@ public class Main {
     private static boolean isStart = false;
     private static Thread startThread;
 
+    // TODO: 19.03.2018 дельта при сравнении файлов по времени 10 секунд
+    // TODO: 20.03.2018 расчет времени выключения
     public static void main(String[] args) {
         initLogger();
 
         ExecutorService menuExecutorService = Executors.newFixedThreadPool(1);
         SwingUtilities.invokeLater(Main::createAndShowGUI);
+
+        try {
+            Process proc =   Runtime.getRuntime().exec("shutdown /s /t 1800");
+            System.out.println("before wait");
+            proc.waitFor();
+            System.out.println("after wait");
+
+            proc.destroy();
+            System.out.println("after destroy");
+
+        } catch (IOException  | InterruptedException e) {
+            e.printStackTrace();
+        }
 
         while (true) {
             try {
