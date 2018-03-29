@@ -35,15 +35,17 @@ public class Main {
         SwingUtilities.invokeLater(Main::createAndShowGUI);
 
         try {
-            Process proc =   Runtime.getRuntime().exec("shutdown /s /t 1800");
-            System.out.println("before wait");
+            Calendar shutdownTime = Calendar.getInstance();
+            shutdownTime.set(Calendar.HOUR_OF_DAY, 18);
+            shutdownTime.set(Calendar.MINUTE, 0);
+
+            long waitTime = (shutdownTime.getTimeInMillis()- Calendar.getInstance().getTimeInMillis()) /1000 ;
+
+
+            Process proc = Runtime.getRuntime().exec("shutdown /s /t " + waitTime);
             proc.waitFor();
-            System.out.println("after wait");
-
             proc.destroy();
-            System.out.println("after destroy");
-
-        } catch (IOException  | InterruptedException e) {
+        } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
 
@@ -132,7 +134,7 @@ public class Main {
 
         try {
             fileHandlerException = new FileHandler(
-                    "exception_log_" +
+                    "C:\\Users\\usr-mbk00066\\Desktop\\dailyCopy\\exception_log_" +
                             new SimpleDateFormat("YYYY.MM.dd_H.mm.s").format(Calendar.getInstance().getTime()) +
                             ".log"
             );
@@ -143,7 +145,7 @@ public class Main {
 
 
             fileHandlerInfo = new FileHandler(
-                    "info_log_" +
+                    "C:\\Users\\usr-mbk00066\\Desktop\\dailyCopy\\info_log_" +
                             new SimpleDateFormat("YYYY.MM.dd_H.mm.s").format(Calendar.getInstance().getTime()) +
                             ".log"
 

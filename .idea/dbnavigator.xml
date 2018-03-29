@@ -23,22 +23,37 @@
     <autoscroll-to-editor value="false" />
     <autoscroll-from-editor value="true" />
     <show-object-properties value="true" />
-    <loaded-nodes>
-      <connection connection-id="7bae5bb0-98f2-400c-b44b-9a19041f3933">
-        <schema name="committees" object-types="column, function, procedure, table, view" />
-      </connection>
-    </loaded-nodes>
+    <loaded-nodes />
   </component>
   <component name="DBNavigator.Project.DatabaseConsoleManager">
     <connection id="7bae5bb0-98f2-400c-b44b-9a19041f3933">
-      <console name="Connection" type="STANDARD" />
+      <console name="Connection" type="STANDARD"><![CDATA[--alter table committees.indicators_of add column source_id integer after source;
+--update committees.indicators_of set source_id = 2 where source = 'Расчет';
+--update committees.indicators_of set source_id = 3 where source = 'ДРОП';
+--update committees.indicators_of set source_id = 4 where source = 'ИАД';
+--update committees.indicators_of set source_id = 5 where source = 'ДЗД';
+--update committees.indicators_of set source_id = 6 where source = 'ЦСОиСМИ';
+
+--ALTER TABLE committees.indicators_of ADD FOREIGN KEY (source_id) REFERENCES committees.sources (sources_id);
+--update committees.indicators_of set is_in_calc = 0 where is_in_calc = 1;
+--ALTER TABLE committees.indicators_of DROP source;
+--ALTER TABLE committees.committees DROP id;]]></console>
     </connection>
   </component>
   <component name="DBNavigator.Project.DatasetFilterManager">
+    <filter-list connection-id="7bae5bb0-98f2-400c-b44b-9a19041f3933" dataset="committees.sources" active-filter-id="EMPTY_FILTER" />
+    <filter-list connection-id="7bae5bb0-98f2-400c-b44b-9a19041f3933" dataset="committees.soursec" active-filter-id="EMPTY_FILTER" />
+    <filter-list connection-id="7bae5bb0-98f2-400c-b44b-9a19041f3933" dataset="committees.indicators_of" active-filter-id="0e9642cf-0b67-4df2-a2ca-d648eb708949">
+      <filter id="0e9642cf-0b67-4df2-a2ca-d648eb708949" name="0" temporary="false" custom-name="false" type="basic" join-type="AND">
+        <condition column="is_table_for_calc" operator="=" value="0" active="true" />
+      </filter>
+    </filter-list>
     <filter-list connection-id="7bae5bb0-98f2-400c-b44b-9a19041f3933" dataset="committees.committees" active-filter-id="EMPTY_FILTER" />
   </component>
   <component name="DBNavigator.Project.EditorStateManager">
-    <last-used-providers />
+    <last-used-providers>
+      <object-type object-type="TABLE" editor-provider="DATA" />
+    </last-used-providers>
   </component>
   <component name="DBNavigator.Project.MethodExecutionManager">
     <method-browser />
@@ -96,7 +111,7 @@
           <charset value="UTF-8" />
           <ddl-file-binding value="true" />
           <database-logging value="false" />
-          <connect-automatically value="true" />
+          <connect-automatically value="false" />
           <restore-workspace value="true" />
           <restore-workspace-deep value="true" />
           <environment-type value="default" />
